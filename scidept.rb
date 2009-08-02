@@ -75,7 +75,13 @@ file("app/views/layouts/application.html.erb") do
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 
     <title><%= @title ||= "My App" %></title>
-    <%= stylesheet_link_tag :all %>
+    <%= stylesheet_link_tag "960gs/reset", :media => "screen, projection" %>
+    <%= stylesheet_link_tag "960gs/960", :media => "screen, projection" %>
+    <%= stylesheet_link_tag "960gs/text", :media => "screen, projection" %>
+    <%= stylesheet_link_tag "good_forms", :media => "screen, projection" %>
+    <%= stylesheet_link_tag "screen", :media => "screen, projection" %>
+    <%= stylesheet_link_tag "print", :media => "print" %>
+
     <%= javascript_include_tag :defaults %>
 </head>
 
