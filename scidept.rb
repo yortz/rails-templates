@@ -2,7 +2,7 @@ run "echo TODO > README"
 
 gem 'rspec', :source => "http://gems.github.com", :lib => "spec", :version => "1.2.7"
 gem 'rspec-rails', :source => "http://gems.github.com", :lib => "spec/rails", :version => "1.2.7.1"
-gem 'cucumber', :version => "0.3.7"
+gem 'cucumber', :version => '0.3.92'
 gem 'webrat', :version => "0.4.4"
 gem 'nakajima-fixjour', :source => "http://gems.github.com", :lib => "fixjour", :version => "0.2.0"
 gem "bmabey-email_spec", :source => "http://gems.github.com", :lib => "email_spec", :version => "0.2.0"
@@ -58,11 +58,37 @@ git :commit => "-m 'Initial commit'"
 run "createuser -s #{self.root}"
 rake "db:create"
 
-session_class = ask("Hello, what should I call your session model (ex 'user_session')?")
-user_class = ask("Hello, what should I call your 'user' model (ex 'user')?")
+app_name = ask("\nWhat is your application called?")
+session_class = ask("\nHello, what should I call your session model (ex 'user_session')?")
+user_class = ask("\nHello, what should I call your 'user' model (ex 'user')?")
 
 generate :session, session_class
 generate :scaffold_resource, session_class.pluralize, "-s", "--skip-migration"
+
+file("app/views/layouts/application.html.erb") do
+  <<-EOF
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+    <title><%= @title ||= "My App" %></title>
+    <%= stylesheet_link_tag :all %>
+    <%= javascript_include_tag :defaults %>
+</head>
+
+<body>
+    <div class="container_16">
+        <%= render_flash_messages %>
+        <%= yield %>
+    </div>
+</body>
+</html>
+
+  EOF
+end
 
 file("app/views/#{session_class.pluralize}/new.html.erb") do
   <<-EOF
@@ -75,6 +101,7 @@ file("app/views/#{session_class.pluralize}/new.html.erb") do
   <%= f.check_box :remember_me %>
   <%= f.submit "Login" %>
 <% end %>
+
   EOF
 end
 
@@ -83,8 +110,13 @@ file("app/controllers/#{session_class.pluralize}_controller.rb") do
 class #{session_class.camelize.pluralize}Controller < ResourceController::Singleton
   create.success.wants.html { redirect_to #{user_class}_path(current_#{user_class}.id) }
   create.failure.wants.html { render :action => "new" }
+  create do
+    success.wants.html { redirect_to user_path(current_user) }
+    success.flash "You should receive an email to confirm your account. Please click on the link to activate your account."
+    failure.wants.html { render :action => "new" }
+  end
   destroy.wants.html { redirect_to root_path }
-  
+
   private
   def object
     @object ||= #{session_class.camelize}.find
@@ -110,7 +142,7 @@ class User < ActiveRecord::Base
 
   def activate!
    self.active = true
-   save
+   save!
   end
 
   def signup(params)
@@ -151,8 +183,8 @@ class #{user_class.camelize.pluralize}Controller < ResourceController::Base
 
     if @#{user_class}.signup(params[:#{user_class}])
       @#{user_class}.deliver_activation_instructions!
-      flash[:notice] = "Your account has been created. Please check your e-mail for your account activation instructions!"
-      redirect_to #{user_class}_path(@#{user_class})
+      add_notice "Your account has been created. Please check your e-mail for your account activation instructions!"
+      redirect_to new_#{session_class}_path
     else
       render :action => :new
     end
@@ -161,10 +193,10 @@ class #{user_class.camelize.pluralize}Controller < ResourceController::Base
   def activate
     if @#{user_class}.activate!
       @#{user_class}.deliver_activation_confirmation!
-      flash[:notice] = "Your account has been activated."
-      redirect_to account_url
+      add_notice "Your account has been activated."
+      redirect_to #{user_class}_path(@#{user_class})
     else
-      flash[:error] = "Unable to active your account, please try again. If this error persists, contact support."
+      add_error "Unable to active your account, please try again. If this error persists, contact support."
       render :action => :new
     end
   end
@@ -187,7 +219,7 @@ describe #{user_class.camelize.pluralize}Controller do
     before(:each) do
       @#{user_class} = valid_#{user_class}
       #{user_class.camelize}.stub!(:new).and_return(@#{user_class})
-      login
+      logout
     end
 
     def do_get
@@ -223,6 +255,7 @@ describe #{user_class.camelize.pluralize}Controller do
   describe "handling GET /users/1/edit" do
 
     before(:each) do
+      login
       @#{user_class} = valid_#{user_class}
       #{user_class.camelize}.stub!(:find).and_return(@#{user_class})
     end
@@ -292,6 +325,7 @@ describe #{user_class.camelize.pluralize}Controller do
 
     before(:each) do
       @#{user_class} = valid_#{user_class}
+      @#{user_class}.save
       #{user_class.camelize}.stub!(:find).and_return(@#{user_class})
       login
     end
@@ -356,7 +390,7 @@ file("app/views/#{user_class.pluralize}/new.html.erb") do
   <<-EOF
 <h1>Sign UP</h1>
 
-<% af_form_for @#{user_class}, :url => account_path do |f| %>
+<% af_form_for :#{user_class}, @#{user_class}, :url => #{user_class.pluralize}_path do |f| %>
   <%= f.error_messages %>
   <%= render :partial => "form", :object => f %>
   <%= f.submit "Sign Up" %>
@@ -368,7 +402,7 @@ file("app/views/#{user_class.pluralize}/edit.html.erb") do
   <<-EOF
 <h1>Edit My Account</h1>
 
-<% form_for @#{user_class}, :url => #{user_class.pluralize}_path do |f| %>
+<% af_form_for :#{user_class}, @#{user_class}, :url => #{user_class.pluralize}_path do |f| %>
   <%= f.error_messages %>
   <%= render :partial => "form", :object => f %>
   <%= f.submit "Update" %>
@@ -385,7 +419,7 @@ file("app/views/#{user_class.pluralize}/_form.html.erb") do
 end
 run("rm app/views/#{user_class.pluralize}/index.html.erb")
 
-route "map.resources :users, :collection => {:activate => :get}"
+route "map.resources :#{user_class.pluralize}, :collection => {:activate => :get}"
 route "map.root :controller => 'users', :action => 'new'"
 
 generate :rspec_controller, "password_resets", "new", "edit"
@@ -394,7 +428,7 @@ route "map.resource :password_reset"
 file('app/controllers/password_resets_controller.rb') do
   <<-EOF
 class PasswordResetsController < ApplicationController
-  before_filter :load_#{user_class}_using_perishable_token, :only => [:edit]
+  before_filter :load_#{user_class}_using_perishable_token, :only => [:edit, :update]
   before_filter :require_no_#{user_class}
 
   def new
@@ -402,13 +436,13 @@ class PasswordResetsController < ApplicationController
   end
 
   def create
-    @#{user_class} = #{user_class.camelize}.find_by_email(params[:email])
+    @#{user_class} = #{user_class.camelize}.find_by_email(params[:#{user_class}][:email])
     if @#{user_class}
       @#{user_class}.deliver_password_reset_instructions!
-      flash[:notice] = "Instructions to reset your password have been emailed to you. Please check your email."
+      add_notice "Instructions to reset your password have been emailed to you. Please check your email."
       redirect_to root_url
     else
-      flash[:notice] = "No #{user_class} was found with that email address"
+      add_error "No #{user_class} was found with that email address"
       @#{user_class} = #{user_class.camelize}.new
       render :action => :new
     end
@@ -419,14 +453,13 @@ class PasswordResetsController < ApplicationController
   end
 
   def update
-    @#{user_class} = #{user_class.camelize}.find params[:#{user_class}][:id]
     @#{user_class}.password = params[:#{user_class}][:password]
     @#{user_class}.password_confirmation = params[:#{user_class}][:password_confirmation]
     if @#{user_class}.save
-      flash[:notice] = "Password successfully updated"
+      add_notice "Password successfully updated"
       redirect_to #{user_class}_path(@#{user_class})
     else
-      flash[:error] = "Unable to update your password, try again."
+      add_error "Unable to update your password, try again."
       render :action => :edit
     end
   end
@@ -440,10 +473,10 @@ file("app/views/password_resets/new.html.erb") do
   <<-EOF
 <h1>Reset Your Password</h1>
 
-<% af_form_for @#{user_class}, :url => password_reset_path do |f| %>
+<% af_form_for :#{user_class}, @#{user_class}, :url => password_reset_path do |f| %>
   <%= f.error_messages %>
   <%= f.text_field :email %>
-  <%= f.submit "Reset" %>
+  <%= f.submit "Reset Password" %>
 <% end %>
   EOF
 end
@@ -452,7 +485,10 @@ file("app/views/password_resets/edit.html.erb") do
   <<-EOF
 <h1>Choose a new password</h1>
 
-<% af_form_for @#{user_class}, :url => password_reset_path(:#{user_class} => {:id => @#{user_class}.id}), :method => :put do |f| %>
+<% af_form_for :#{user_class}, @#{user_class},
+               :url => password_reset_path(:id => @user.perishable_token),
+               :html => { :method => :put } do |f| %>
+
   <%= f.error_messages %>
   <%= f.text_field :password %>
   <%= f.text_field :password_confirmation, :label => "Confirm Password" %>
@@ -493,14 +529,14 @@ describe PasswordResetsController do
       end
     end
 
-    context "if a#{user_class.camelize} doesn't exist" do
+    context "if a #{user_class.camelize} doesn't exist" do
       before(:each) do
         #{user_class.camelize}.stub!(:find_by_email).and_return nil
       end
 
-      it "should redirect to new action" do
+      it "should render new action" do
         do_post
-        response.should redirect_to :action => "new"
+        response.should render_template "new"
       end
     end
 
@@ -508,10 +544,9 @@ describe PasswordResetsController do
 
   describe "handling PUT to /password_resets/" do
     before(:each) do
-      #{user_class.camelize}.stub!(:find_by_perishable_token).and_return @#{user_class}
-      @{user_class} = valid_#{user_class}
+      @#{user_class} = valid_#{user_class}
       @#{user_class}.save
-      #{user_class.camelize}.stub!(:find).and_return @#{user_class}
+      #{user_class.camelize}.stub!(:find_using_perishable_token).and_return @#{user_class}
     end
 
     def do_put
@@ -523,6 +558,7 @@ describe PasswordResetsController do
       @#{user_class}.should_receive(:password_confirmation=).with('password')
       do_put
     end
+
     it "should redirect to #{user_class} url" do
       do_put
       response.should redirect_to(#{user_class}_url(@#{user_class}))
@@ -541,7 +577,7 @@ class Notifier < ActionMailer::Base
 
   def password_reset_instructions(user)
     subject       "Password Reset Instructions"
-    from          "#{self.root.camelize} Notifier"
+    from          "#{app_name} Notifier"
     recipients    user.email
     sent_on       Time.now
     body          :edit_password_reset_url => edit_password_reset_url(:id => user.perishable_token)
@@ -549,7 +585,7 @@ class Notifier < ActionMailer::Base
 
   def activation_instructions(user)
     subject       "Activation Instructions"
-    from          "#{self.root.camelize} Notifier"
+    from          "#{app_name} Notifier"
     recipients    user.email
     sent_on       Time.now
     body          :account_activation_url => activate_users_url(:id => user.perishable_token)
@@ -557,7 +593,7 @@ class Notifier < ActionMailer::Base
 
   def activation_confirmation(user)
     subject       "Activation Complete"
-    from          "#{self.root.camelize} Notifier"
+    from          "#{app_name} Notifier"
     recipients    user.email
     sent_on       Time.now
     body          :root_url => root_url
@@ -574,7 +610,7 @@ A request to reset your password has been made.
 If you did not make this request, simply ignore this email.  
 If you did make this request just click the link below:  
 
-<%= link_to "Reset Password", edit_password_reset_url %>
+<%= link_to "Reset Password", @edit_password_reset_url %>
 
 If the above URL does not work try copying and pasting it into your browser.  
 If you continue to have problem please feel free to contact us.
@@ -752,10 +788,11 @@ Feature: Authenication
     And I fill in "user[password]" with "password"
     And I fill in "user[password_confirmation]" with "password"
     And I press "Sign Up"
-    Then I should be on root
+    Then I should see "Your account has been created. Please check your e-mail for your account activation instructions!"
+    And I should be on new_user_session
     When I open the email
     And I click the first link in the email
-    Then I should be on my account page
+    Then I should be on the login page
 
   Scenario: Logging In
     Given I am an existing user
@@ -765,22 +802,16 @@ Feature: Authenication
     And I press "Login"
     Then I should be on my account page
 
-  Scenario: Request Password Reset
+  Scenario: Scenario: Resetting my password
     Given I am an existing user
     And I am on new_password_reset
     When I fill in "user[email]" with "valid@email.com"
     And I press "Reset Password"
-    Then I should be on the homepage
+    Then I should see "Instructions"
     When I open the email
     And I click the first link in the email
-    Then I should be ready to edit my password
-
-  Scenario: Actually reset password
-    Given I am an existing user
-    And I requested a password reset
-    And I am on my password reset page
-    When I fill in "user[password]" with "foobar"
-    And I fill in "user[password_confirmation]" with "foobar"
+    And I fill in "Password" with "soccer"
+    And I fill in "Confirm Password" with "soccer"
     And I press "Change Password"
     Then I should be on my account page
     And I should see "Password successfully updated"
@@ -791,16 +822,13 @@ end
 file("features/step_definitions/authentication_steps.rb") do
   <<-EOF
 Given /^I am an existing user$/ do
-  @user = valid_user
+  @user = valid_user(:email => "valid@email.com", :password => "password", :password_confirmation => "password")
   @user.save
+  @user.activate!
 end
 
 Given /^I am a new user$/ do
   @user = new_user(:email => "some@email.com") 
-end
-
-Then /^I should be ready to edit my password$/ do
-  pending
 end
 
 Given /^I requested a password reset$/ do
@@ -846,36 +874,48 @@ World(AuthlogicHelperMethods)
   EOF
 end
 
-# file("features/support/paths.rb") do
-#   <<-EOF
-# module NavigationHelpers
-#   def path_to(page_name)
-#     case page_name
-# 
-#       when /the homepage/
-#         '/'
-#       when /my account page/
-#         user_path(User.last.id)
-#       when /new_user_session/
-#         new_user_session_path()
-#       when /my password reset page/
-#         edit_password_reset_path(:id => User.last.perishable_token)
-# 
-#       else
-#         begin
-#           eval(page_name+'_path')
-#         rescue
-#           raise "Can't find mapping from \"#{page_name}\" to a path.\n" +
-#                   "Now, go and add a mapping in #{__FILE__}"
-#         end
-#     end
-#   end
-# end
-# 
-# World(NavigationHelpers)
-# 
-#   EOF
-# end
+file("features/support/paths.rb") do
+%q{
+  module NavigationHelpers
+   def path_to(page_name)
+     case page_name
+
+       when /the homepage/
+         '/'
+       when /my account page/
+         user_path(User.last.id)
+       when /new_user_session/
+         new_user_session_path()
+       when /my password reset page/
+         edit_password_reset_path(:id => User.last.perishable_token)
+       when /the login page/
+         new_user_session_path
+
+       else
+         begin
+           eval(page_name+'_path')
+         rescue
+           raise "Can't find mapping from \"#{page_name}\" to a path.\n" +
+                   "Now, go and add a mapping in #{__FILE__}"
+         end
+     end
+   end
+  end
+
+  World(NavigationHelpers)
+
+}
+end
+
+file("features/step_definitions/utility_steps.rb") do
+  <<-EOF
+Then /^I save and open page$/ do
+  save_and_open_page
+end
+
+  EOF
+end
+
 generate "email_spec"
 
 git :add => "."
@@ -892,8 +932,9 @@ footer = <<-FOOTER
 # Last Steps:
 # 1. Set up any acl you would like in your controllers. Check out the Authlogic tutorials for examples.
 # 2. Edit the url host name in Notifier.rb or your emails won't work.
-# 3. rake spec && rake features
-# 4. Profit!
+# 3. Edit the #current_email_address method in features/step_definitions/email_steps.rb
+# 4. rake spec && rake features
+# 5. Profit!
 ###################################
 
 FOOTER
