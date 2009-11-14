@@ -1,25 +1,22 @@
 run "echo TODO > README"
+run 'rm public/javascripts/*'
 
-gem 'rspec', :source => "http://gems.github.com", :lib => "spec", :version => "1.2.7"
-gem 'rspec-rails', :source => "http://gems.github.com", :lib => "spec/rails", :version => "1.2.7.1"
-gem 'cucumber', :version => '0.3.92'
-gem 'webrat', :version => "0.4.4"
-gem 'nakajima-fixjour', :source => "http://gems.github.com", :lib => "fixjour", :version => "0.2.0"
-gem "bmabey-email_spec", :source => "http://gems.github.com", :lib => "email_spec", :version => "0.2.0"
+gem 'rspec', :lib => "spec", :version => "1.2.9"
+gem 'rspec-rails', :lib => "spec/rails", :version => "1.2.9"
+gem 'cucumber', :version => '0.4.4'
+gem 'webrat', :version => "0.5.3"
+gem 'fixjour', :lib => "fixjour", :version => "0.2.1"
+gem "email_spec", :lib => "email_spec", :version => "0.3.5"
 
-gem 'binarylogic-authlogic', :lib => "authlogic", :source => 'http://gems.github.com', :verson => "2.1.0"
-gem "giraffesoft-resource_controller", :source => "http://gems.github.com", :lib => "resource_controller", :version => "0.6.5"
-gem 'less', :version => "0.7.0"
+gem 'authlogic', :lib => "authlogic", :verson => "2.1.3"
+gem 'less', :version => "1.2.11", :lib => false
+gem 'more', :version => "0.0.3"
+gem 'flash-mesage-conductor', :lib => "flash_message_conductor"
+gem "jrails", :version => "0.6.0"
 
 rake "gems:install"
 
-plugin "less-for-rails", :git => "git://github.com/augustl/less-for-rails.git"
-
-run 'rm public/javascripts/*'
-plugin "jrails", :git => "git://github.com/aaronchi/jrails.git"
-
 plugin "accessible_form_builder", :git => "git://github.com/BJClark/accessible_form_builder.git"
-plugin "flash-message-conductor", :git => "git://github.com/planetargon/flash-message-conductor.git"
 
 generate :rspec
 generate :cucumber
@@ -33,6 +30,8 @@ run "rm -rf 960-grid-system"
 run "touch public/stylesheets/screen.less"
 run "touch public/stylesheets/print.less"
 
+run 'echo Less::More.source_path = Rails.root + "/public/stylesheets" >> config/environment.rb'
+
 run "mkdir assets"
 
 run "rm -rf test"
@@ -44,12 +43,11 @@ file ".gitignore", <<-END
 log/*.log
 tmp/**/*
 config/database.yml
-assets/*
 .idea
 .generators
+public/stylesheets/*.css
 END
 
-run "touch tmp/.gitignore log/.gitignore vendor/.gitignore"
 run "cp config/database.yml config/example_database.yml"
 
 git :add => "."
@@ -58,7 +56,6 @@ git :commit => "-m 'Initial commit'"
 run "createuser -s #{self.root}"
 rake "db:create"
 
-app_name = ask("\nWhat is your application called?")
 session_class = ask("\nHello, what should I call your session model (ex 'user_session')?")
 user_class = ask("\nHello, what should I call your 'user' model (ex 'user')?")
 
