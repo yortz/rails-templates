@@ -11,10 +11,10 @@ gem "email_spec", :lib => "email_spec", :version => "0.3.5"
 gem 'authlogic', :lib => "authlogic", :verson => "2.1.3"
 gem 'less', :version => "1.2.11", :lib => false
 gem 'more', :version => "0.0.3"
-gem 'flash-mesage-conductor', :lib => "flash_message_conductor"
+gem 'flash-message-conductor', :lib => "flash_message_conductor"
 gem "jrails", :version => "0.6.0"
 
-rake "gems:install"
+rake("gems:install", :sudo => true)
 
 plugin "accessible_form_builder", :git => "git://github.com/BJClark/accessible_form_builder.git"
 
